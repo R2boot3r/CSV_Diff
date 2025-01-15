@@ -347,14 +347,30 @@
             // Find and update only the specific cell
             const cell = document.querySelector(`td[data-row="${rowIndex}"][data-col="${column}"]`);
             if (cell) {
-                cell.innerHTML = `<span class="diff-indicator"></span>${wrapUrlsInText(value)}`;
+                // Keep the old and new values from the original diff
+                const oldValue = cell.dataset.oldValue;
+                const newValue = cell.dataset.newValue;
+                
+                cell.innerHTML = `
+                    <span class="diff-indicator"></span>
+                    <span class="cell-content" ondblclick="makeEditable(this)">${wrapUrlsInText(value)}</span>
+                    <div class="diff-popup">
+                        <div class="value-option old" onclick="selectValue(${rowIndex}, '${column}', '${oldValue}')">
+                            Original: ${wrapUrlsInText(oldValue)}
+                        </div>
+                        <div class="value-option new" onclick="selectValue(${rowIndex}, '${column}', '${newValue}')">
+                            Modified: ${wrapUrlsInText(newValue)}
+                        </div>
+                    </div>`;
                 cell.classList.add('selected');
                 
-                // Update the popup content
-                const popup = cell.querySelector('.diff-popup');
-                if (popup) {
+                // Re-add the click event listener for the popup
+                cell.addEventListener('click', showDiffPopup);
+                
+                // Hide any visible popups
+                document.querySelectorAll('.diff-popup.show').forEach(popup => {
                     popup.classList.remove('show');
-                }
+                });
             }
         }
 
