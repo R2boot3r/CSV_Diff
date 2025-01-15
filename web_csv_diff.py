@@ -14,7 +14,11 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 def find_differences(df1, df2):
     """Find differences between two DataFrames."""
-    all_columns = list(set(df1.columns) | set(df2.columns))
+    # Preserve column order from both files
+    all_columns = list(df1.columns)
+    for col in df2.columns:
+        if col not in all_columns:
+            all_columns.append(col)
     
     # Add missing columns with NaN values
     for col in all_columns:
@@ -22,6 +26,10 @@ def find_differences(df1, df2):
             df1[col] = np.nan
         if col not in df2.columns:
             df2[col] = np.nan
+            
+    # Reorder df2 columns to match all_columns order
+    df1 = df1[all_columns]
+    df2 = df2[all_columns]
     
     differences = []
     for idx in range(max(len(df1), len(df2))):
@@ -94,18 +102,23 @@ def upload_files():
         df1 = pd.read_csv(file1_path, dtype=str)
         df2 = pd.read_csv(file2_path, dtype=str)
         
+        # Get ordered list of all columns
+        all_columns = list(df1.columns)
+        for col in df2.columns:
+            if col not in all_columns:
+                all_columns.append(col)
+        
         # Find differences
         differences = find_differences(df1, df2)
         
         # Convert DataFrames to JSON-safe format
         data1 = df1.replace({np.nan: None}).to_dict(orient='records')
         data2 = df2.replace({np.nan: None}).to_dict(orient='records')
-        columns = list(set(df1.columns) | set(df2.columns))
         
         return jsonify({
             'data1': data1,
             'data2': data2,
-            'columns': columns,
+            'columns': all_columns,
             'differences': differences
         })
     except Exception as e:

@@ -9,6 +9,26 @@
         .table-container {
             overflow-x: auto;
             margin: 20px 0;
+            max-height: 70vh;
+            overflow-y: auto;
+            position: relative;
+            width: 100%;
+        }
+        .table {
+            margin-bottom: 0;
+            width: max-content;  /* Allow table to expand based on content */
+            min-width: 100%;    /* Ensure table is at least as wide as container */
+        }
+        thead tr th {
+            position: sticky;
+            top: 0;
+            background: white;
+            z-index: 1;
+            box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+            white-space: nowrap;  /* Prevent header text from wrapping */
+        }
+        td {
+            white-space: nowrap;  /* Prevent cell content from wrapping */
         }
         .diff-cell {
             background-color: #fff7d6 !important;
@@ -26,7 +46,7 @@
             background-color: rgba(0, 0, 0, 0.075) !important;  /* Bootstrap's default hover color */
         }
         .diff-popup {
-            position: absolute;
+            position: fixed;
             background: white;
             border: 1px solid #ddd;
             padding: 10px;
@@ -35,8 +55,7 @@
             z-index: 1000;
             display: none;
             min-width: 200px;
-            left: 0;
-            top: 100%;
+            max-width: 300px;
         }
         .diff-popup.show {
             display: block;
@@ -200,7 +219,9 @@
                             const isSelected = selectedCells.has(key);
                             return `<td class="diff-cell ${isSelected ? 'selected' : ''}" 
                                       data-row="${rowIndex}" 
-                                      data-col="${col}">
+                                      data-col="${col}"
+                                      data-old-value="${escapedOldValue}"
+                                      data-new-value="${escapedNewValue}">
                                     <span class="diff-indicator"></span>${wrapUrlsInText(value)}
                                     <div class="diff-popup">
                                         <div class="value-option old" onclick="selectValue(${rowIndex}, '${col}', '${escapedOldValue}')">
@@ -212,7 +233,7 @@
                                     </div>
                                 </td>`;
                         } else {
-                            return `<td>${wrapUrlsInText(value)}</td>`;
+                            return `<td data-row="${rowIndex}" data-col="${col}">${wrapUrlsInText(value)}</td>`;
                         }
                     }).join('')}
                 </tr>`;
@@ -220,32 +241,72 @@
 
             // Add event listeners for diff cells
             document.querySelectorAll('.diff-cell').forEach(cell => {
-                cell.addEventListener('mouseenter', showDiffPopup);
-                cell.addEventListener('mouseleave', hideDiffPopup);
+                cell.addEventListener('click', showDiffPopup);
+            });
+
+            // Add click event listener to document to close popup when clicking outside
+            document.addEventListener('click', (event) => {
+                if (!event.target.closest('.diff-cell') && !event.target.closest('.diff-popup')) {
+                    document.querySelectorAll('.diff-popup.show').forEach(popup => {
+                        popup.classList.remove('show');
+                    });
+                }
             });
         }
 
         function showDiffPopup(event) {
+            event.stopPropagation();  // Prevent document click from immediately closing popup
+            
             // Hide any other visible popups first
             document.querySelectorAll('.diff-popup.show').forEach(popup => {
-                popup.classList.remove('show');
+                if (popup !== event.currentTarget.querySelector('.diff-popup')) {
+                    popup.classList.remove('show');
+                }
             });
+            
             const popup = event.currentTarget.querySelector('.diff-popup');
-            popup.classList.add('show');
-        }
-
-        function hideDiffPopup(event) {
-            const popup = event.currentTarget.querySelector('.diff-popup');
-            // Only hide if mouse is not over the popup
-            if (!event.relatedTarget || !popup.contains(event.relatedTarget)) {
+            
+            // Toggle popup visibility
+            if (popup.classList.contains('show')) {
                 popup.classList.remove('show');
+                return;
             }
+            
+            // Calculate position
+            const rect = event.currentTarget.getBoundingClientRect();
+            const windowWidth = window.innerWidth;
+            
+            // Position popup below the cell
+            popup.style.top = rect.bottom + window.scrollY + 5 + 'px';
+            
+            // If there's not enough space on the right, show popup on the left
+            if (rect.right + 200 > windowWidth) {
+                popup.style.right = windowWidth - rect.right + 'px';
+                popup.style.left = 'auto';
+            } else {
+                popup.style.left = rect.left + 'px';
+                popup.style.right = 'auto';
+            }
+            
+            popup.classList.add('show');
         }
 
         function selectValue(rowIndex, column, value) {
             currentData[rowIndex][column] = value;
             selectedCells.add(`${rowIndex}-${column}`);  // Mark this cell as selected
-            renderTable(Object.keys(currentData[0]), currentData, differences);
+            
+            // Find and update only the specific cell
+            const cell = document.querySelector(`td[data-row="${rowIndex}"][data-col="${column}"]`);
+            if (cell) {
+                cell.innerHTML = `<span class="diff-indicator"></span>${wrapUrlsInText(value)}`;
+                cell.classList.add('selected');
+                
+                // Update the popup content
+                const popup = cell.querySelector('.diff-popup');
+                if (popup) {
+                    popup.classList.remove('show');
+                }
+            }
         }
 
         document.getElementById('saveButton').addEventListener('click', async () => {
