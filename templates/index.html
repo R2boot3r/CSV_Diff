@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Diff Viewer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .table-container {
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+        .diff-cell {
+            background-color: #fff7d6 !important;
+            cursor: pointer;
+            position: relative;
+            transition: background-color 0.3s;
+        }
+        .diff-cell:hover {
+            background-color: #ffe4b3 !important;
+        }
+        .diff-cell.selected {
+            background-color: transparent !important;
+        }
+        .diff-cell.selected:hover {
+            background-color: rgba(0, 0, 0, 0.075) !important;  /* Bootstrap's default hover color */
+        }
+        .diff-popup {
+            position: absolute;
+            background: white;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: none;
+            min-width: 200px;
+            left: 0;
+            top: 100%;
+        }
+        .diff-popup.show {
+            display: block;
+        }
+        .value-option {
+            padding: 5px;
+            margin: 5px 0;
+            cursor: pointer;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+        .value-option:hover {
+            background-color: #f8f9fa;
+        }
+        .value-option.old {
+            border-left: 3px solid #dc3545;
+        }
+        .value-option.new {
+            border-left: 3px solid #28a745;
+        }
+        .link-cell {
+            color: #007bff;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        .diff-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+            background-color: #ffc107;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <h1 class="my-4">CSV Diff Viewer</h1>
+        
+        <!-- File Upload Form -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <form id="uploadForm">
+                    <div class="row">
+                        <div class="col-md-5">
+                            <div class="mb-3">
+                                <label for="file1" class="form-label">Original CSV File:</label>
+                                <input type="file" class="form-control" id="file1" name="file1" accept=".csv" required>
+                            </div>
+                        </div>
+                        <div class="col-md-5">
+                            <div class="mb-3">
+                                <label for="file2" class="form-label">Modified CSV File:</label>
+                                <input type="file" class="form-control" id="file2" name="file2" accept=".csv" required>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="mb-3">
+                                <label class="form-label">&nbsp;</label>
+                                <button type="submit" class="form-control btn btn-primary">Compare Files</button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Table View -->
+        <div class="table-container">
+            <table class="table table-bordered table-hover" id="diffTable">
+                <thead>
+                    <tr id="headerRow"></tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- Save Button -->
+        <div class="mb-4">
+            <button id="saveButton" class="btn btn-success" style="display: none;">
+                Save Result
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let currentData = null;
+        let differences = null;
+        let selectedCells = new Set();  // Track which cells have been selected
+
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) throw new Error('Upload failed');
+                
+                const data = await response.json();
+                currentData = data.data2;  // Start with new data
+                differences = data.differences;
+                
+                renderTable(data.columns, data.data2, differences);
+                document.getElementById('saveButton').style.display = 'block';
+            } catch (error) {
+                alert('Error uploading files: ' + error.message);
+            }
+        });
+
+        function findUrls(text) {
+            // Convert to string and handle null/undefined
+            const str = String(text || '');
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            return str.match(urlRegex) || [];
+        }
+
+        function wrapUrlsInText(text) {
+            // Convert to string and handle null/undefined
+            const str = String(text || '');
+            const urls = findUrls(str);
+            if (urls.length === 0) return str;
+            
+            let result = str;
+            urls.forEach(url => {
+                // Escape special characters in the URL for the replacement
+                const escapedUrl = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                result = result.replace(new RegExp(escapedUrl, 'g'), 
+                    `<a href="${url}" class="link-cell" target="_blank" onclick="event.stopPropagation()">${url}</a>`);
+            });
+            return result;
+        }
+
+        function renderTable(columns, data, differences) {
+            // Render headers
+            const headerRow = document.getElementById('headerRow');
+            headerRow.innerHTML = columns.map(col => `<th>${col}</th>`).join('');
+            
+            // Create a map of differences for faster lookup
+            const diffMap = new Map();
+            differences.forEach(diff => {
+                const key = `${diff.row}-${diff.column}`;
+                diffMap.set(key, diff);
+            });
+            
+            // Render body
+            const tableBody = document.getElementById('tableBody');
+            tableBody.innerHTML = data.map((row, rowIndex) => {
+                return `<tr>
+                    ${columns.map(col => {
+                        const key = `${rowIndex}-${col}`;
+                        const diff = diffMap.get(key);
+                        const value = row[col] || '';
+                        
+                        if (diff) {
+                            const escapedOldValue = diff.old_value.replace(/"/g, '&quot;');
+                            const escapedNewValue = diff.new_value.replace(/"/g, '&quot;');
+                            const isSelected = selectedCells.has(key);
+                            return `<td class="diff-cell ${isSelected ? 'selected' : ''}" 
+                                      data-row="${rowIndex}" 
+                                      data-col="${col}">
+                                    <span class="diff-indicator"></span>${wrapUrlsInText(value)}
+                                    <div class="diff-popup">
+                                        <div class="value-option old" onclick="selectValue(${rowIndex}, '${col}', '${escapedOldValue}')">
+                                            Original: ${wrapUrlsInText(diff.old_value)}
+                                        </div>
+                                        <div class="value-option new" onclick="selectValue(${rowIndex}, '${col}', '${escapedNewValue}')">
+                                            Modified: ${wrapUrlsInText(diff.new_value)}
+                                        </div>
+                                    </div>
+                                </td>`;
+                        } else {
+                            return `<td>${wrapUrlsInText(value)}</td>`;
+                        }
+                    }).join('')}
+                </tr>`;
+            }).join('');
+
+            // Add event listeners for diff cells
+            document.querySelectorAll('.diff-cell').forEach(cell => {
+                cell.addEventListener('mouseenter', showDiffPopup);
+                cell.addEventListener('mouseleave', hideDiffPopup);
+            });
+        }
+
+        function showDiffPopup(event) {
+            // Hide any other visible popups first
+            document.querySelectorAll('.diff-popup.show').forEach(popup => {
+                popup.classList.remove('show');
+            });
+            const popup = event.currentTarget.querySelector('.diff-popup');
+            popup.classList.add('show');
+        }
+
+        function hideDiffPopup(event) {
+            const popup = event.currentTarget.querySelector('.diff-popup');
+            // Only hide if mouse is not over the popup
+            if (!event.relatedTarget || !popup.contains(event.relatedTarget)) {
+                popup.classList.remove('show');
+            }
+        }
+
+        function selectValue(rowIndex, column, value) {
+            currentData[rowIndex][column] = value;
+            selectedCells.add(`${rowIndex}-${column}`);  // Mark this cell as selected
+            renderTable(Object.keys(currentData[0]), currentData, differences);
+        }
+
+        document.getElementById('saveButton').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        result: currentData
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Save failed');
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'merged_result.csv';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } catch (error) {
+                alert('Error saving file: ' + error.message);
+            }
+        });
+    </script>
+</body>
+</html> 
