@@ -102,6 +102,10 @@ def upload_files():
         df1 = pd.read_csv(file1_path, dtype=str)
         df2 = pd.read_csv(file2_path, dtype=str)
         
+        # Multiply data by 4
+        df1 = pd.concat([df1] * 4, ignore_index=True)
+        df2 = pd.concat([df2] * 4, ignore_index=True)
+        
         # Get ordered list of all columns
         all_columns = list(df1.columns)
         for col in df2.columns:

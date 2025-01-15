@@ -13,22 +13,67 @@
             overflow-y: auto;
             position: relative;
             width: 100%;
+            border: 1px solid #dee2e6;
         }
         .table {
             margin-bottom: 0;
             width: max-content;  /* Allow table to expand based on content */
             min-width: 100%;    /* Ensure table is at least as wide as container */
+            border-collapse: collapse;
         }
         thead tr th {
             position: sticky;
             top: 0;
             background: white;
             z-index: 1;
-            box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+            border: 1px solid #dee2e6;
             white-space: nowrap;  /* Prevent header text from wrapping */
+            padding: 0.75rem;
+        }
+        thead tr th::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: white;
+            z-index: -1;
+        }
+        thead tr th::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            height: 2px;
+            background: #dee2e6;
         }
         td {
             white-space: nowrap;  /* Prevent cell content from wrapping */
+            position: relative;   /* For proper input positioning */
+            padding: 0.5rem;      /* Consistent padding */
+            border: 1px solid #dee2e6;
+        }
+        .cell-content {
+            display: inline-block;
+            width: 100%;
+            min-width: 50px;      /* Minimum width for cells */
+            padding: 2px 4px;     /* Match td padding */
+        }
+        .editable-input {
+            box-sizing: border-box;
+            width: 100%;
+            min-width: 50px;
+            border: none;
+            background: white;
+            padding: 2px 4px;
+            outline: 2px solid #007bff;
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            margin: 0;
         }
         .diff-cell {
             background-color: #fff7d6 !important;
@@ -222,7 +267,7 @@
                                       data-col="${col}"
                                       data-old-value="${escapedOldValue}"
                                       data-new-value="${escapedNewValue}">
-                                    <span class="diff-indicator"></span>${wrapUrlsInText(value)}
+                                    <span class="diff-indicator"></span><span class="cell-content" ondblclick="makeEditable(this)">${wrapUrlsInText(value)}</span>
                                     <div class="diff-popup">
                                         <div class="value-option old" onclick="selectValue(${rowIndex}, '${col}', '${escapedOldValue}')">
                                             Original: ${wrapUrlsInText(diff.old_value)}
@@ -233,7 +278,7 @@
                                     </div>
                                 </td>`;
                         } else {
-                            return `<td data-row="${rowIndex}" data-col="${col}">${wrapUrlsInText(value)}</td>`;
+                            return `<td data-row="${rowIndex}" data-col="${col}"><span class="cell-content" ondblclick="makeEditable(this)">${wrapUrlsInText(value)}</span></td>`;
                         }
                     }).join('')}
                 </tr>`;
@@ -336,6 +381,49 @@
                 alert('Error saving file: ' + error.message);
             }
         });
+
+        function makeEditable(element) {
+            const currentValue = element.textContent;
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = currentValue;
+            input.className = 'editable-input';
+            
+            // Replace the text with the input
+            element.innerHTML = '';
+            element.appendChild(input);
+            input.focus();
+            
+            // Select all text
+            input.select();
+            
+            // Handle input blur and enter key
+            input.addEventListener('blur', () => finishEditing(input, element));
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    finishEditing(input, element);
+                }
+                if (e.key === 'Escape') {
+                    element.innerHTML = wrapUrlsInText(currentValue);
+                }
+                e.stopPropagation();
+            });
+        }
+
+        function finishEditing(input, element) {
+            const newValue = input.value;
+            const cell = element.closest('td');
+            const rowIndex = parseInt(cell.dataset.row);
+            const column = cell.dataset.col;
+            
+            // Update the data
+            if (currentData[rowIndex]) {
+                currentData[rowIndex][column] = newValue;
+            }
+            
+            // Update the display
+            element.innerHTML = wrapUrlsInText(newValue);
+        }
     </script>
 </body>
 </html> 
