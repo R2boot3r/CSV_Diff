@@ -27,6 +27,7 @@
             background: white;
             z-index: 1;
             border: 1px solid #dee2e6;
+            border-bottom: 2px solid black;
             white-space: nowrap;  /* Prevent header text from wrapping */
             padding: 0.75rem;
         }
@@ -44,10 +45,10 @@
             content: '';
             position: absolute;
             left: 0;
-            bottom: 0;
+            bottom: -2px;
             width: 100%;
             height: 2px;
-            background: #dee2e6;
+            background: black;
         }
         td {
             white-space: nowrap;  /* Prevent cell content from wrapping */
@@ -133,6 +134,9 @@
             border-radius: 50%;
             margin-right: 5px;
             background-color: #ffc107;
+        }
+        tbody tr:first-child td {
+            border-top: none;
         }
     </style>
 </head>
